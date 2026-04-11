@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Match REFES</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --blue:#1F4E79;--blue2:#2E75B6;--blue3:#DEEAF1;
+  --green:#375623;--green2:#C6EFCE;--green3:#70AD47;
+  --amber:#856404;--amber2:#FFEB9C;--amber3:#FFC000;
+  --red:#9C2B2B;--red2:#FFC7CE;
+  --gray:#595959;--gray2:#F2F2F2;--gray3:#D9D9D9;
+  --text:#1a1a1a;--text2:#555;--text3:#888;
+  --border:#e0e0e0;--bg:#f8f8f8;--white:#fff;
+  --r:8px;--rl:12px;
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;color:var(--text);background:var(--bg);min-height:100vh}
+h2{font-size:16px;font-weight:600;color:var(--blue);margin-bottom:12px}
+h3{font-size:12px;font-weight:600;color:var(--gray);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+
+.topbar{background:var(--blue);color:#fff;padding:14px 24px}
+.topbar h1{font-size:18px;font-weight:600}
+.topbar .sub{font-size:11px;opacity:.65;margin-top:2px}
+.body{padding:24px;max-width:1400px;margin:0 auto}
+
+.stepper{display:flex;border:0.5px solid var(--border);border-radius:var(--rl);overflow:hidden;background:var(--white);margin-bottom:24px}
+.step{flex:1;padding:10px 14px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text3);border-right:0.5px solid var(--border);transition:background .15s}
+.step:last-child{border-right:none}
+.step.active{background:var(--blue3);color:var(--blue);font-weight:500}
+.step.done{background:var(--green2);color:var(--green)}
+.sn{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;flex-shrink:0}
+.step.active .sn{background:var(--blue);color:#fff}
+.step.done .sn{background:var(--green3);color:#fff}
+.step:not(.active):not(.done) .sn{background:var(--gray3);color:var(--gray)}
+
+.card{background:var(--white);border:0.5px solid var(--border);border-radius:var(--rl);padding:20px 24px;margin-bottom:18px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px}
+
+label{display:block;font-size:12px;font-weight:500;color:var(--text2);margin-bottom:4px}
+select,input[type=text],input[type=number]{width:100%;padding:7px 10px;border:0.5px solid var(--border);border-radius:var(--r);font-size:13px;color:var(--text);background:var(--white);outline:none}
+select:focus,input:focus{border-color:var(--blue2)}
+.field{margin-bottom:12px}
+.hint{font-size:11px;color:var(--text3);margin-top:3px}
+
+.badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600}
+.br{background:#FEE2E2;color:#991B1B}
+.bi{background:var(--amber2);color:var(--amber)}
+.bo{background:var(--gray2);color:var(--gray)}
+
+.zone{border:1.5px dashed var(--border);border-radius:var(--rl);padding:24px;text-align:center;cursor:pointer;transition:all .15s}
+.zone:hover,.zone.drag{border-color:var(--blue2);background:var(--blue3)}
+.zone.ok{border-color:var(--green3);background:var(--green2);border-style:solid}
+.zone input{display:none}
+.zone-icon{font-size:26px;margin-bottom:6px}
+.zone-name{font-size:11px;font-weight:500;color:var(--green);margin-top:4px}
+.hidden{display:none}
+
+.wr{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--border)}
+.wr:last-child{border-bottom:none}
+.wl{flex:1;font-size:13px}
+.wm{font-size:11px;color:var(--text3);width:110px;text-align:right}
+.ws{width:100px}
+.wp{font-size:13px;font-weight:500;width:36px;text-align:right;color:var(--blue)}
+.wtot{font-size:12px;padding-top:8px;text-align:right}
+.wtot.ok{color:var(--green)}.wtot.warn{color:var(--red)}
+
+.btn{padding:9px 18px;border-radius:var(--r);font-size:13px;font-weight:500;cursor:pointer;border:none;transition:opacity .15s}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.bp{background:var(--blue);color:#fff}.bp:hover:not(:disabled){background:var(--blue2)}
+.bs{background:var(--white);color:var(--blue);border:0.5px solid var(--blue2)}.bs:hover:not(:disabled){background:var(--blue3)}
+.bg{background:var(--green3);color:#fff}.bg:hover:not(:disabled){background:var(--green)}
+.acts{display:flex;gap:10px;align-items:center;margin-top:18px}
+
+.pbar{height:6px;background:var(--gray3);border-radius:3px;overflow:hidden;margin:10px 0}
+.pfill{height:100%;background:var(--blue2);border-radius:3px;transition:width .3s}
+.log{font-size:11px;color:var(--text3);font-family:monospace;background:var(--gray2);padding:8px 10px;border-radius:var(--r);max-height:100px;overflow-y:auto;margin-top:6px}
+
+.metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:18px}
+.metric{background:var(--gray2);border-radius:var(--r);padding:14px;text-align:center}
+.metric .val{font-size:26px;font-weight:600;line-height:1}
+.metric .lbl{font-size:11px;color:var(--text3);margin-top:4px}
+.mgood .val{color:var(--green)}.mwarn .val{color:var(--amber)}
+.mbad  .val{color:var(--red)} .mneu  .val{color:var(--text2)}
+
+.tw{overflow-x:auto;border:0.5px solid var(--border);border-radius:var(--rl)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:var(--blue);color:#fff;padding:8px 10px;text-align:left;white-space:nowrap;font-weight:500;font-size:11px}
+td{padding:7px 10px;border-bottom:0.5px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:nth-child(even) td{background:var(--gray2)}
+.cg{background:#C6EFCE;color:#375623;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600}
+.cw{background:#FFEB9C;color:#856404;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600}
+.cb{background:#FFC7CE;color:#9C2B2B;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600}
+.cn{background:var(--gray3);color:var(--gray);padding:2px 7px;border-radius:20px;font-size:10px;font-weight:600}
+.sbw{display:flex;align-items:center;gap:5px}
+.sbm{height:6px;border-radius:3px;flex-shrink:0}
+
+.filters{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.filters select{width:auto;min-width:130px}
+.filters input{width:180px}
+
+.warn-box{padding:10px 14px;background:#FEF9C3;border-radius:var(--r);font-size:12px;color:#854D0E;margin-top:12px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>Match REFES — vinculador de padrones</h1>
+  <div class="sub">Cruza cualquier padrón contra REFES por scoring múltiple · Flask + Python backend</div>
+</div>
+
+<div class="body">
+
+<div class="stepper">
+  <div class="step active" id="st1"><div class="sn">1</div>Archivos</div>
+  <div class="step" id="st2"><div class="sn">2</div>Columnas</div>
+  <div class="step" id="st3"><div class="sn">3</div>Parámetros</div>
+  <div class="step" id="st4"><div class="sn">4</div>Resultados</div>
+</div>
+
+<!-- ══ PASO 1 ══════════════════════════════════════════════════════ -->
+<div id="p1">
+<div class="g2">
+  <div class="card">
+    <h2>Archivo REFES <span class="badge br">fundamental</span></h2>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:12px">El registro federal contra el que se quiere cruzar.</p>
+    <div class="zone" id="zr" onclick="document.getElementById('ir').click()">
+      <input type="file" id="ir" accept=".xlsx,.xls,.csv">
+      <div class="zone-icon">📄</div>
+      <div style="font-size:13px;font-weight:500">Subir REFES</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:3px">.xlsx .xls .csv</div>
+      <div class="zone-name hidden" id="rn"></div>
+    </div>
+    <div class="field" style="margin-top:12px">
+      <label>¿Cómo viene el domicilio? <span style="color:#c00">*</span></label>
+      <select id="r-addr">
+        <option value="">— seleccionar —</option>
+        <option value="combined">Un solo campo (calle + número juntos)</option>
+        <option value="split">Dos campos separados (calle / número)</option>
+      </select>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Archivo externo <span class="badge br">fundamental</span></h2>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:12px">El padrón que recibirá el ID REFES correspondiente.</p>
+    <div class="zone" id="ze" onclick="document.getElementById('ie').click()">
+      <input type="file" id="ie" accept=".xlsx,.xls,.csv">
+      <div class="zone-icon">📄</div>
+      <div style="font-size:13px;font-weight:500">Subir archivo externo</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:3px">.xlsx .xls .csv</div>
+      <div class="zone-name hidden" id="en"></div>
+    </div>
+    <div class="field" style="margin-top:12px">
+      <label>¿Cómo viene el domicilio? <span style="color:#c00">*</span></label>
+      <select id="e-addr">
+        <option value="">— seleccionar —</option>
+        <option value="combined">Un solo campo (calle + número juntos)</option>
+        <option value="split">Dos campos separados (calle / número)</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Campos esperados en cada archivo</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+    <div>
+      <h3>REFES</h3>
+      <table><tr><th>Campo</th><th>Importancia</th></tr>
+        <tr><td>ID establecimiento</td><td><span class="badge br">fundamental</span></td></tr>
+        <tr><td>Código provincia INDEC (2 dígitos)</td><td><span class="badge bi">importante</span></td></tr>
+        <tr><td>Código departamento INDEC (3 dígitos)</td><td><span class="badge bi">importante</span></td></tr>
+        <tr><td>Nombre provincia</td><td><span class="badge bi">importante</span></td></tr>
+        <tr><td>Nombre departamento</td><td><span class="badge bi">importante</span></td></tr>
+        <tr><td>Nombre localidad</td><td><span class="badge bi">importante</span></td></tr>
+        <tr><td>Nombre del establecimiento</td><td><span class="badge bi">importante</span></td></tr>
+        <tr><td>Domicilio / Calle</td><td><span class="badge bo">opcional</span></td></tr>
+        <tr><td>Número (si separado)</td><td><span class="badge bo">opcional</span></td></tr>
+        <tr><td>CUIT</td><td><span class="badge bo">opcional</span></td></tr>
+      </table>
+    </div>
+    <div>
+      <h3>Archivo externo</h3>
+      <table><tr><th>Campo</th><th>Importancia</th></tr>
+        <tr><td>ID propio</td><td><span class="badge br">fundamental</span></td></tr>
+        <tr><td>Código provincia INDEC (2 dígitos)</td><td><span class="badge bi">importante</span></td></tr>
+        <tr><td>Código departamento INDEC (3 dígitos)</td><td><span class="badge bi">importante</span></td></tr>
+        <tr><td>Nombre provincia</td><td><span class="badge bi">importante</span></td></tr>
+        <tr><td>Nombre departamento</td><td><span class="badge bi">importante</span></td></tr>
+        <tr><td>Nombre localidad</td><td><span class="badge bi">importante</span></td></tr>
+        <tr><td>Nombre del establecimiento</td><td><span class="badge bi">importante</span></td></tr>
+        <tr><td>Domicilio / Calle</td><td><span class="badge bo">opcional</span></td></tr>
+        <tr><td>Número (si separado)</td><td><span class="badge bo">opcional</span></td></tr>
+        <tr><td>CUIT</td><td><span class="badge bo">opcional</span></td></tr>
+      </table>
+    </div>
+  </div>
+  <div class="warn-box" style="margin-top:14px">
+    <strong>Códigos INDEC:</strong> si el archivo externo no los trae, el match funciona igual usando comparación de texto para provincia y departamento — pero la precisión es menor. Si podés normalizar los códigos antes de subir el archivo, el resultado mejora significativamente.
+  </div>
+</div>
+
+<div class="acts">
+  <button class="btn bp" id="b12" onclick="go2()" disabled>Siguiente: mapear columnas →</button>
+  <span id="m1" style="font-size:12px;color:var(--text3)">Subí los dos archivos para continuar</span>
+</div>
+</div>
+
+<!-- ══ PASO 2 ══════════════════════════════════════════════════════ -->
+<div id="p2" class="hidden">
+<div class="g2">
+  <div class="card"><h2>Columnas de REFES</h2><div id="fr"></div></div>
+  <div class="card"><h2>Columnas del archivo externo</h2><div id="fe"></div></div>
+</div>
+<div class="acts">
+  <button class="btn bs" onclick="go1()">← Atrás</button>
+  <button class="btn bp" id="b23" onclick="go3()">Siguiente: parámetros →</button>
+</div>
+</div>
+
+<!-- ══ PASO 3 ══════════════════════════════════════════════════════ -->
+<div id="p3" class="hidden">
+<div class="g2">
+  <div class="card">
+    <h2>Umbrales de calidad</h2>
+    <div class="field">
+      <label>Score mínimo para "match bueno"</label>
+      <input type="range" id="tg" min="50" max="95" step="5" value="70" oninput="updLeg()">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-top:2px">
+        <span>50</span><span id="tgv" style="font-weight:500;color:var(--blue)">70</span><span>95</span>
+      </div>
+    </div>
+    <div class="field">
+      <label>Score mínimo para "revisar" (por debajo → dudoso)</label>
+      <input type="range" id="tw" min="30" max="70" step="5" value="50" oninput="updLeg()">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-top:2px">
+        <span>30</span><span id="twv" style="font-weight:500;color:var(--amber3)">50</span><span>70</span>
+      </div>
+    </div>
+    <div style="margin-top:10px;font-size:12px;display:flex;flex-direction:column;gap:5px">
+      <div><span class="cg">Match bueno</span> score ≥ <span id="lg">70</span></div>
+      <div><span class="cw">Revisar</span> score entre <span id="lw">50</span> y <span id="lg2">69</span></div>
+      <div><span class="cb">Dudoso</span> score &lt; <span id="lw2">50</span></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Opciones</h2>
+    <div class="field">
+      <label>¿Usar CUIT para agrupar primero?</label>
+      <select id="uc">
+        <option value="yes">Sí — matching por CUIT cuando coincide</option>
+        <option value="no">No — solo matching geográfico</option>
+      </select>
+      <div class="hint">Cuando hay CUIT compartido, agrupa por CUIT antes de calcular scores.</div>
+    </div>
+    <div class="field">
+      <label>Prefijos a eliminar del nombre</label>
+      <input type="text" id="np" value="FARMACIA,FARM">
+      <div class="hint">Lista separada por comas. Se eliminan del inicio del nombre antes de comparar.</div>
+    </div>
+    <div class="field">
+      <label>Prefijos a eliminar del domicilio</label>
+      <input type="text" id="ap" value="AVENIDA,AV,CALLE">
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Ponderaciones del score (deben sumar 100%)</h2>
+  <div id="wu"></div>
+  <div class="wtot" id="wt"></div>
+</div>
+
+<div class="acts">
+  <button class="btn bs" onclick="go2()">← Atrás</button>
+  <button class="btn bp" id="brun" onclick="runMatch()">Ejecutar matching →</button>
+  <span id="m3" style="font-size:12px;color:var(--text3)"></span>
+</div>
+</div>
+
+<!-- ══ PASO 4 ══════════════════════════════════════════════════════ -->
+<div id="p4" class="hidden">
+
+<div class="card" id="pc">
+  <h2>Procesando en el servidor…</h2>
+  <div class="pbar"><div class="pfill" id="pf" style="width:0%"></div></div>
+  <div class="log" id="lg-box"></div>
+</div>
+
+<div id="dash" class="hidden">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <h2 style="margin:0">Resultados</h2>
+    <div style="display:flex;gap:8px">
+      <button class="btn bs" onclick="go1()">← Nuevo análisis</button>
+      <button class="btn bg" id="dl-btn" onclick="download()">Descargar Excel</button>
+    </div>
+  </div>
+  <div class="metrics" id="met"></div>
+  <div class="g2">
+    <div class="card">
+      <h2>Por provincia</h2>
+      <div class="tw" style="max-height:300px;overflow-y:auto">
+        <table><thead><tr><th>Provincia</th><th>Total</th><th>Buenos</th><th>Revisar</th><th>Dudosos</th><th>Sin match</th><th>Score prom.</th></tr></thead>
+        <tbody id="ptb"></tbody></table>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Distribución de scores</h2>
+      <canvas id="hist" height="240"></canvas>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Detalle</h2>
+    <div class="filters">
+      <select id="fc" onchange="renderT()">
+        <option value="">Todas las categorías</option>
+        <option value="MATCH_BUENO">Match bueno</option>
+        <option value="MATCH_REVISAR">Revisar</option>
+        <option value="MATCH_DUDOSO">Dudoso</option>
+        <option value="SIN_MATCH">Sin match</option>
+      </select>
+      <select id="fp" onchange="renderT()"><option value="">Todas las provincias</option></select>
+      <input type="text" id="ft" placeholder="Buscar nombre…" oninput="renderT()" style="width:180px">
+      <span id="fc2" style="font-size:12px;color:var(--text3);align-self:center"></span>
+    </div>
+    <div class="tw">
+      <table>
+        <thead><tr>
+          <th>ID externo</th><th>Nombre externo</th><th>Provincia</th>
+          <th>ID REFES</th><th>Nombre REFES</th>
+          <th>S.Prov</th><th>S.Dept</th><th>S.Loc</th><th>S.Nom</th><th>S.Dom</th>
+          <th>Score</th><th>Camino</th><th>Categoría</th>
+        </tr></thead>
+        <tbody id="rtb"></tbody>
+      </table>
+    </div>
+    <div id="pag" style="display:flex;gap:8px;margin-top:8px;align-items:center;font-size:12px;color:var(--text3)"></div>
+  </div>
+</div>
+</div>
+
+</div>
+
+<script>
+const ST = {
+  refesId:null, extId:null,
+  cols:{refes:[],ext:[]},
+  results:[], filtered:[], page:0, ps:50,
+  outId:null, chart:null,
+  W:{PROV:20,DEPT:30,LOC:15,NOM:20,DOM:15},
+};
+
+// ── Upload ─────────────────────────────────────────────────────────
+async function uploadFile(file, role){
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('role', role);
+  const r = await fetch('/api/upload', {method:'POST', body:fd});
+  return r.json();
+}
+
+function setupZone(zoneId, inputId, nameId, role, stKey){
+  const inp = document.getElementById(inputId);
+  const zone = document.getElementById(zoneId);
+  inp.addEventListener('change', async e=>{
+    if(!e.target.files[0]) return;
+    const res = await uploadFile(e.target.files[0], role);
+    if(res.error){ alert(res.error); return; }
+    ST[stKey+'Id'] = res.file_id;
+    ST.cols[stKey] = res.columns;
+    zone.classList.add('ok');
+    const n = document.getElementById(nameId);
+    n.textContent = `✓ ${res.filename} — ${res.rows.toLocaleString()} filas`;
+    n.classList.remove('hidden');
+    chk1();
+  });
+  zone.addEventListener('dragover', e=>{e.preventDefault();zone.classList.add('drag')});
+  zone.addEventListener('dragleave', ()=>zone.classList.remove('drag'));
+  zone.addEventListener('drop', e=>{
+    e.preventDefault(); zone.classList.remove('drag');
+    const dt=new DataTransfer(); dt.items.add(e.dataTransfer.files[0]);
+    inp.files=dt.files; inp.dispatchEvent(new Event('change'));
+  });
+}
+
+setupZone('zr','ir','rn','refes','refes');
+setupZone('ze','ie','en','ext','ext');
+['r-addr','e-addr'].forEach(id=>document.getElementById(id).addEventListener('change',chk1));
+
+function chk1(){
+  const ok = ST.refesId && ST.extId &&
+    document.getElementById('r-addr').value &&
+    document.getElementById('e-addr').value;
+  document.getElementById('b12').disabled = !ok;
+  document.getElementById('m1').textContent = ok?'':'Subí los dos archivos y seleccioná el tipo de domicilio';
+}
+
+// ── Navegación ─────────────────────────────────────────────────────
+function setStep(n){
+  for(let i=1;i<=4;i++){
+    const s=document.getElementById('st'+i);
+    const p=document.getElementById('p'+i);
+    s.className='step'+(i===n?' active':i<n?' done':'');
+    p.classList.toggle('hidden',i!==n);
+  }
+}
+function go1(){ setStep(1); }
+
+// ── Mapeo columnas ─────────────────────────────────────────────────
+const RF=[
+  {k:'id',    l:'ID establecimiento',        req:true},
+  {k:'cuit',  l:'CUIT',                      req:false},
+  {k:'prov_indec',l:'Código provincia INDEC',req:false,hint:'2 dígitos'},
+  {k:'dept_indec',l:'Código departamento INDEC',req:false,hint:'3 dígitos'},
+  {k:'prov_text', l:'Nombre provincia',      req:false},
+  {k:'dept_text', l:'Nombre departamento',   req:false},
+  {k:'loc',   l:'Nombre localidad',          req:false},
+  {k:'name',  l:'Nombre establecimiento',    req:false},
+  {k:'addr',  l:'Domicilio / Calle',          req:false},
+  {k:'num',   l:'Número',                    req:false,split:true},
+];
+const EF=[
+  {k:'id',    l:'ID propio',                 req:true},
+  {k:'cuit',  l:'CUIT',                      req:false},
+  {k:'prov_indec',l:'Código provincia INDEC',req:false,hint:'2 dígitos'},
+  {k:'dept_indec',l:'Código departamento INDEC',req:false,hint:'3 dígitos'},
+  {k:'prov_text', l:'Nombre provincia',      req:false},
+  {k:'dept_text', l:'Nombre departamento',   req:false},
+  {k:'loc',   l:'Nombre localidad',          req:false},
+  {k:'name',  l:'Nombre establecimiento',    req:false},
+  {k:'addr',  l:'Domicilio / Calle',          req:false},
+  {k:'num',   l:'Número',                    req:false,split:true},
+];
+const GUESSES={
+  id:['establecimiento_id','id','Idcofa','ID'],
+  cuit:['CUIT','cuit','cuit_limpio'],
+  prov_indec:['provincia_id','prov_indec','id_provincia_indec'],
+  dept_indec:['departamento_id','dept_indec','id_departamento_indec'],
+  prov_text:['provincia_nombre','Provincia','provincia'],
+  dept_text:['departamento_nombre','Partido/ Departamento','departamento'],
+  loc:['localidad_nombre','Localidad','localidad'],
+  name:['establecimiento_nombre','Nombre','nombre'],
+  addr:['domicilio','Calle','calle'],
+  num:['Nro','numero','nro','num'],
+};
+
+function buildMap(fields, cols, addrType, containerId){
+  const el=document.getElementById(containerId);
+  el.innerHTML='';
+  fields.forEach(f=>{
+    if(f.split && addrType!=='split') return;
+    const d=document.createElement('div');
+    d.className='field';
+    d.innerHTML=`<label>${f.l} <span class="badge ${f.req?'br':'bo'}">${f.req?'fundamental':'opcional'}</span></label>
+      <select id="m-${containerId}-${f.k}">
+        <option value="">— no disponible —</option>
+        ${cols.map(c=>`<option value="${c}">${c}</option>`).join('')}
+      </select>${f.hint?`<div class="hint">${f.hint}</div>`:''}`;
+    el.appendChild(d);
+    const sel=d.querySelector('select');
+    for(const g of (GUESSES[f.k]||[])){
+      const found=cols.find(c=>c.toLowerCase()===g.toLowerCase());
+      if(found){sel.value=found;break;}
+    }
+  });
+}
+
+function go2(){
+  const ra=document.getElementById('r-addr').value;
+  const ea=document.getElementById('e-addr').value;
+  buildMap(RF, ST.cols.refes, ra, 'fr');
+  buildMap(EF, ST.cols.ext,   ea, 'fe');
+  setStep(2);
+}
+
+function go3(){
+  const getMap=(fields,pfx)=>{
+    const m={};
+    fields.forEach(f=>{
+      const el=document.getElementById(`m-${pfx}-${f.k}`);
+      if(el) m[f.k]=el.value||null;
+    });
+    return m;
+  };
+  ST.colRefes = getMap(RF,'fr');
+  ST.colExt   = getMap(EF,'fe');
+  if(!ST.colRefes.id||!ST.colExt.id){alert('Necesitás mapear el ID de cada archivo.');return;}
+  buildWeights();
+  setStep(3);
+}
+
+// ── Pesos ──────────────────────────────────────────────────────────
+const WF=[
+  {k:'PROV',l:'Provincia',           m:'Código INDEC o texto'},
+  {k:'DEPT',l:'Departamento/Partido',m:'Código INDEC o texto'},
+  {k:'LOC', l:'Localidad',           m:'Fuzzy texto'},
+  {k:'NOM', l:'Nombre establecimiento',m:'Fuzzy texto'},
+  {k:'DOM', l:'Domicilio/Calle+Nro', m:'Fuzzy texto'},
+];
+
+function buildWeights(){
+  const el=document.getElementById('wu');
+  el.innerHTML='';
+  WF.forEach(f=>{
+    const r=document.createElement('div');
+    r.className='wr';
+    r.innerHTML=`<span class="wl">${f.l}</span><span class="wm">${f.m}</span>
+      <input type="range" class="ws" min="0" max="60" step="5" value="${ST.W[f.k]}" data-k="${f.k}" oninput="updW(this)">
+      <span class="wp" id="wp-${f.k}">${ST.W[f.k]}%</span>`;
+    el.appendChild(r);
+  });
+  updWTot();
+  updLeg();
+}
+
+function updW(el){
+  ST.W[el.dataset.k]=parseInt(el.value);
+  document.getElementById('wp-'+el.dataset.k).textContent=el.value+'%';
+  updWTot();
+}
+function updWTot(){
+  const t=Object.values(ST.W).reduce((a,b)=>a+b,0);
+  const el=document.getElementById('wt');
+  el.textContent=`Total: ${t}%`;
+  el.className='wtot '+(t===100?'ok':'warn');
+  document.getElementById('brun').disabled=t!==100;
+  document.getElementById('m3').textContent=t!==100?`Ajustá los pesos para que sumen 100% (ahora: ${t}%)`:'';
+}
+function updLeg(){
+  const g=document.getElementById('tg').value;
+  const w=document.getElementById('tw').value;
+  document.getElementById('tgv').textContent=g;
+  document.getElementById('twv').textContent=w;
+  document.getElementById('lg').textContent=g;
+  document.getElementById('lg2').textContent=g-1;
+  document.getElementById('lw').textContent=w;
+  document.getElementById('lw2').textContent=w;
+}
+
+// ── Run ────────────────────────────────────────────────────────────
+function log(s){
+  const el=document.getElementById('lg-box');
+  el.innerHTML+=s+'<br>';el.scrollTop=el.scrollHeight;
+}
+function setP(p){document.getElementById('pf').style.width=p+'%';}
+
+async function runMatch(){
+  setStep(4);
+  document.getElementById('pc').classList.remove('hidden');
+  document.getElementById('dash').classList.add('hidden');
+  document.getElementById('lg-box').innerHTML='';
+  setP(10);
+  log('Enviando datos al servidor Python…');
+
+  const body={
+    refes_id:         ST.refesId,
+    ext_id:           ST.extId,
+    col_refes:        ST.colRefes,
+    col_ext:          ST.colExt,
+    refes_addr_type:  document.getElementById('r-addr').value,
+    ext_addr_type:    document.getElementById('e-addr').value,
+    weights:          ST.W,
+    thr_good:         parseInt(document.getElementById('tg').value),
+    thr_warn:         parseInt(document.getElementById('tw').value),
+    use_cuit:         document.getElementById('uc').value==='yes',
+    name_prefixes:    document.getElementById('np').value.split(',').map(s=>s.trim()).filter(Boolean),
+    addr_prefixes:    document.getElementById('ap').value.split(',').map(s=>s.trim()).filter(Boolean),
+  };
+
+  setP(30); log('Procesando en servidor…');
+
+  try{
+    const res=await fetch('/api/match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data=await res.json();
+    if(data.error){ log('ERROR: '+data.error); return; }
+
+    setP(90);
+    log(`Completado. ${data.total.toLocaleString()} registros.`);
+    log(`Match bueno: ${data.bueno} | Revisar: ${data.revisar} | Dudoso: ${data.dudoso} | Sin match: ${data.sin_match}`);
+
+    ST.results=data.results;
+    ST.outId=data.out_id;
+    setP(100);
+
+    setTimeout(()=>{
+      document.getElementById('pc').classList.add('hidden');
+      buildDash(data);
+      document.getElementById('dash').classList.remove('hidden');
+    },400);
+  }catch(e){
+    log('Error de conexión: '+e.message);
+  }
+}
+
+function download(){
+  if(ST.outId) window.location='/api/download/'+ST.outId;
+}
+
+// ── Dashboard ──────────────────────────────────────────────────────
+function buildDash(data){
+  document.getElementById('met').innerHTML=`
+    <div class="metric"><div class="val">${data.total.toLocaleString()}</div><div class="lbl">Total</div></div>
+    <div class="metric mgood"><div class="val">${data.bueno.toLocaleString()}</div><div class="lbl">Match bueno</div></div>
+    <div class="metric mwarn"><div class="val">${data.revisar.toLocaleString()}</div><div class="lbl">Revisar</div></div>
+    <div class="metric mbad"><div class="val">${data.dudoso.toLocaleString()}</div><div class="lbl">Dudosos</div></div>
+    <div class="metric mneu"><div class="val">${data.sin_match.toLocaleString()}</div><div class="lbl">Sin match</div></div>
+  `;
+
+  const byP={};
+  ST.results.forEach(r=>{
+    const p=r.ext_provincia||'Sin datos';
+    if(!byP[p]) byP[p]={t:0,g:0,w:0,b:0,n:0,sc:[]};
+    byP[p].t++;
+    if(r.categoria==='MATCH_BUENO') byP[p].g++;
+    else if(r.categoria==='MATCH_REVISAR') byP[p].w++;
+    else if(r.categoria==='MATCH_DUDOSO')  byP[p].b++;
+    else byP[p].n++;
+    if(r.score_total!==null) byP[p].sc.push(r.score_total);
+  });
+
+  const provs=Object.entries(byP).sort((a,b)=>b[1].t-a[1].t);
+  document.getElementById('ptb').innerHTML=provs.map(([p,d])=>{
+    const avg=d.sc.length?Math.round(d.sc.reduce((a,b)=>a+b,0)/d.sc.length*10)/10:'—';
+    return `<tr><td>${p}</td><td>${d.t}</td>
+      <td style="color:var(--green);font-weight:500">${d.g}</td>
+      <td style="color:var(--amber);font-weight:500">${d.w}</td>
+      <td style="color:var(--red);font-weight:500">${d.b}</td>
+      <td style="color:var(--text3)">${d.n}</td>
+      <td style="font-weight:500">${avg}</td></tr>`;
+  }).join('');
+
+  const psel=document.getElementById('fp');
+  psel.innerHTML='<option value="">Todas las provincias</option>'+
+    provs.map(([p])=>`<option value="${p}">${p}</option>`).join('');
+
+  const scored=ST.results.filter(r=>r.score_total!==null).map(r=>r.score_total);
+  const bins=Array(10).fill(0);
+  scored.forEach(s=>{const i=Math.min(9,Math.floor(s/10));bins[i]++;});
+  if(ST.chart) ST.chart.destroy();
+  ST.chart=new Chart(document.getElementById('hist').getContext('2d'),{
+    type:'bar',
+    data:{
+      labels:['0-9','10-19','20-29','30-39','40-49','50-59','60-69','70-79','80-89','90-100'],
+      datasets:[{data:bins,backgroundColor:bins.map((_,i)=>i>=7?'#70AD47':i>=5?'#FFC000':'#E24B4A'),borderRadius:4}]
+    },
+    options:{responsive:true,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{font:{size:11}}},x:{ticks:{font:{size:11}}}}}
+  });
+
+  ST.filtered=ST.results; ST.page=0;
+  renderT();
+}
+
+function renderT(){
+  const cat=document.getElementById('fc').value;
+  const prov=document.getElementById('fp').value;
+  const txt=document.getElementById('ft').value.toLowerCase();
+  ST.filtered=ST.results.filter(r=>{
+    if(cat&&r.categoria!==cat) return false;
+    if(prov&&r.ext_provincia!==prov) return false;
+    if(txt&&!((r.ext_nombre||'').toLowerCase().includes(txt)||(r.refes_nombre||'').toLowerCase().includes(txt))) return false;
+    return true;
+  });
+  document.getElementById('fc2').textContent=`${ST.filtered.length.toLocaleString()} registros`;
+  const start=ST.page*ST.ps;
+  const page=ST.filtered.slice(start,start+ST.ps);
+  document.getElementById('rtb').innerHTML=page.map(r=>{
+    const sc=r.score_total;
+    const scC=sc===null?'var(--text3)':sc>=70?'var(--green)':sc>=50?'var(--amber)':'var(--red)';
+    const bC=sc>=70?'#70AD47':sc>=50?'#FFC000':'#E24B4A';
+    const badge=r.categoria==='MATCH_BUENO'?'<span class="cg">Match bueno</span>':
+      r.categoria==='MATCH_REVISAR'?'<span class="cw">Revisar</span>':
+      r.categoria==='MATCH_DUDOSO'?'<span class="cb">Dudoso</span>':'<span class="cn">Sin match</span>';
+    return `<tr>
+      <td style="font-family:monospace;font-size:11px">${r.ext_id||''}</td>
+      <td>${r.ext_nombre||''}</td><td style="font-size:11px">${r.ext_provincia||''}</td>
+      <td style="font-family:monospace;font-size:11px">${r.refes_id||'—'}</td>
+      <td>${r.refes_nombre||'—'}</td>
+      <td style="text-align:center">${r.score_provincia??'—'}</td>
+      <td style="text-align:center">${r.score_departamento??'—'}</td>
+      <td style="text-align:center">${r.score_localidad??'—'}</td>
+      <td style="text-align:center">${r.score_nombre??'—'}</td>
+      <td style="text-align:center">${r.score_domicilio??'—'}</td>
+      <td><div class="sbw">
+        <div class="sbm" style="width:${sc??0}px;max-width:55px;background:${bC}"></div>
+        <span style="color:${scC};font-weight:500">${sc??'—'}</span>
+      </div></td>
+      <td style="text-align:center;font-size:11px">${r.camino}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join('');
+  const tp=Math.ceil(ST.filtered.length/ST.ps);
+  document.getElementById('pag').innerHTML=
+    `<button class="btn bs" style="padding:4px 10px;font-size:12px" onclick="ST.page=Math.max(0,ST.page-1);renderT()" ${ST.page===0?'disabled':''}>← Anterior</button>
+    <span>Pág. ${ST.page+1} de ${Math.max(1,tp)}</span>
+    <button class="btn bs" style="padding:4px 10px;font-size:12px" onclick="ST.page=Math.min(tp-1,ST.page+1);renderT()" ${ST.page>=tp-1?'disabled':''}>Siguiente →</button>`;
+}
+</script>
+</body>
+</html>
