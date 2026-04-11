@@ -2,9 +2,6 @@ venv/
 __pycache__/
 *.pyc
 *.pyo
-match_app/uploads/
-match_app/outputs/
-*.xlsx
-*.xls
-*.csv
+uploads/
+outputs/
 .env
