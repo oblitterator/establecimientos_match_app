@@ -13,12 +13,14 @@ def _ensure(*pkgs):
             print(f'Instalando {pkg}...')
             subprocess.check_call([sys.executable, '-m', 'pip', 'install', pkg, '--quiet'])
 
-_ensure('flask', 'pandas', 'openpyxl')
+_ensure('flask', 'pandas', 'openpyxl', 'requests')
 
-import os, re, uuid, unicodedata
+import os, re, uuid, unicodedata, threading
 from pathlib import Path
 import pandas as pd
 from flask import Flask, request, jsonify, send_file, send_from_directory
+
+import georef_normalizer as _geo
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -549,6 +551,190 @@ def download(out_id):
     if not path.exists():
         return jsonify({'error': 'Archivo no encontrado'}), 404
     return send_file(path, as_attachment=True, download_name='match_refes_resultados.xlsx')
+
+
+# ─────────────────────────────────────────────────────────────────────
+# GEOREF — enriquecimiento de domicilios con API Georef
+# ─────────────────────────────────────────────────────────────────────
+
+GEO_JOBS: dict = {}
+_GEO_LOCK = threading.Lock()
+
+
+def _run_geo_job(job_id: str, df: pd.DataFrame, col_map: dict, addr_type: str, max_workers: int):
+    """Corre en un thread aparte. Actualiza GEO_JOBS[job_id] con el progreso."""
+    n_total = len(df)
+    with _GEO_LOCK:
+        GEO_JOBS[job_id]['total'] = n_total
+
+    def progress_cb(done, total):
+        with _GEO_LOCK:
+            GEO_JOBS[job_id]['processed'] = done
+
+    try:
+        results = _geo.procesar_dataframe(
+            df,
+            col_provincia    = col_map.get('provincia')    or None,
+            col_departamento = col_map.get('departamento') or None,
+            col_domicilio    = col_map.get('domicilio')    or None,
+            col_calle        = col_map.get('calle')        or None,
+            col_numero       = col_map.get('numero')       or None,
+            col_localidad    = col_map.get('localidad')    or None,
+            addr_type        = addr_type,
+            max_workers      = max_workers,
+            progress_cb      = progress_cb,
+        )
+
+        out_path = OUTPUT_DIR / f'geo_{job_id}.xlsx'
+        _save_geo_xlsx(results, out_path)
+
+        n_ok  = sum(1 for r in results if r and r.get('latitud') is not None)
+        n_err = sum(1 for r in results if r and r.get('domicilio_error'))
+
+        with _GEO_LOCK:
+            GEO_JOBS[job_id].update({
+                'status':    'done',
+                'processed': n_total,
+                'con_punto': n_ok,
+                'errores':   n_err,
+                'out_path':  str(out_path),
+            })
+
+    except Exception as e:
+        import traceback
+        with _GEO_LOCK:
+            GEO_JOBS[job_id].update({
+                'status':    'error',
+                'error_msg': str(e),
+                'trace':     traceback.format_exc(),
+            })
+
+
+def _save_geo_xlsx(results: list, path: Path):
+    from openpyxl import Workbook
+    from openpyxl.styles import PatternFill, Font, Alignment
+    from openpyxl.utils import get_column_letter
+
+    if not results:
+        pd.DataFrame().to_excel(path, index=False)
+        return
+
+    GEO_COLS = [
+        'provincia_normalizada', 'id_provincia_indec',
+        'departamento_normalizado', 'id_departamento_indec',
+        'domicilio_normalizado', 'latitud', 'longitud',
+        'provincia_error', 'departamento_error', 'domicilio_error',
+    ]
+
+    orig_cols = [c for c in results[0].keys() if c not in GEO_COLS]
+    all_cols  = orig_cols + GEO_COLS
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Domicilios normalizados'
+
+    fill_hdr  = PatternFill('solid', start_color='1F4E79')
+    fill_ok   = PatternFill('solid', start_color='C6EFCE')
+    fill_err  = PatternFill('solid', start_color='FFC7CE')
+    fill_sep  = PatternFill('solid', start_color='DEEAF1')
+
+    ws.append(all_cols)
+    for i, c in enumerate(all_cols, 1):
+        cell = ws.cell(1, i)
+        cell.font      = Font(name='Arial', bold=True, color='FFFFFF', size=9)
+        cell.fill      = fill_hdr if c not in GEO_COLS else fill_sep
+        cell.alignment = Alignment(horizontal='center', wrap_text=True)
+
+    lat_idx = all_cols.index('latitud') + 1 if 'latitud' in all_cols else None
+    err_idx = all_cols.index('domicilio_error') + 1 if 'domicilio_error' in all_cols else None
+
+    for r in results:
+        if r is None:
+            continue
+        ws.append([r.get(c) for c in all_cols])
+        row_n = ws.max_row
+        if lat_idx:
+            lat_val = ws.cell(row_n, lat_idx).value
+            fill    = fill_ok if lat_val is not None else (fill_err if r.get('domicilio_error') else None)
+            if fill:
+                ws.cell(row_n, lat_idx).fill = fill
+        if err_idx and r.get('domicilio_error'):
+            ws.cell(row_n, err_idx).fill = fill_err
+
+    for i, c in enumerate(all_cols, 1):
+        ws.column_dimensions[get_column_letter(i)].width = (
+            22 if c in ('domicilio_normalizado', 'provincia_normalizada', 'departamento_normalizado')
+            else 14 if c in ('latitud', 'longitud', 'id_departamento_indec', 'id_provincia_indec')
+            else 28 if 'error' in c
+            else 16
+        )
+    ws.freeze_panes = 'A2'
+
+    wb.save(path)
+
+
+@app.route('/geo/process', methods=['POST'])
+def geo_process():
+    body = request.json or {}
+    file_id  = body.get('file_id')
+    col_map  = body.get('col_map', {})
+    addr_type    = body.get('addr_type', 'combined')
+    max_workers  = min(int(body.get('max_workers', 5)), 10)
+
+    if not file_id:
+        return jsonify({'error': 'Falta file_id'}), 400
+
+    # Buscar el archivo subido
+    matches = list(UPLOAD_DIR.glob(f'{file_id}.*'))
+    if not matches:
+        return jsonify({'error': 'Archivo no encontrado'}), 404
+
+    try:
+        df = read_file(matches[0])
+    except Exception as e:
+        return jsonify({'error': f'Error al leer el archivo: {e}'}), 400
+
+    job_id = str(uuid.uuid4())
+    with _GEO_LOCK:
+        GEO_JOBS[job_id] = {
+            'status':    'running',
+            'processed': 0,
+            'total':     len(df),
+            'con_punto': 0,
+            'errores':   0,
+            'out_path':  None,
+            'error_msg': None,
+        }
+
+    t = threading.Thread(
+        target=_run_geo_job,
+        args=(job_id, df, col_map, addr_type, max_workers),
+        daemon=True,
+    )
+    t.start()
+
+    return jsonify({'job_id': job_id, 'total': len(df)})
+
+
+@app.route('/geo/status/<job_id>')
+def geo_status(job_id):
+    with _GEO_LOCK:
+        job = GEO_JOBS.get(job_id)
+    if job is None:
+        return jsonify({'error': 'Job no encontrado'}), 404
+    return jsonify(job)
+
+
+@app.route('/geo/download/<job_id>')
+def geo_download(job_id):
+    with _GEO_LOCK:
+        job = GEO_JOBS.get(job_id)
+    if not job or job['status'] != 'done':
+        return jsonify({'error': 'Job no listo'}), 404
+    path = Path(job['out_path'])
+    if not path.exists():
+        return jsonify({'error': 'Archivo no encontrado'}), 404
+    return send_file(path, as_attachment=True, download_name='domicilios_normalizados.xlsx')
 
 
 # ─────────────────────────────────────────────────────────────────────

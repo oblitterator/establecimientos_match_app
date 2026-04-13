@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Match REFES</title>
+<title>Match REFES / Georef</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -109,16 +109,41 @@ tr:nth-child(even) td{background:var(--gray2)}
 .col-panel.open{display:block}
 .col-panel label{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:400;padding:3px 0;cursor:pointer;break-inside:avoid;white-space:nowrap}
 .col-panel input[type=checkbox]{width:auto;cursor:pointer}
+
+/* ── Tabs ───────────────────────────────────────────────────────── */
+.tabs{display:flex;gap:0;border-bottom:2px solid var(--blue);margin-bottom:22px}
+.tab{padding:9px 22px;font-size:13px;font-weight:500;cursor:pointer;border:none;background:none;color:var(--text3);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue);background:var(--blue3)}
+.tab:hover:not(.active){color:var(--blue2);background:var(--gray2)}
+.tab-content{display:none}.tab-content.active{display:block}
+
+/* ── Georef ─────────────────────────────────────────────────────── */
+.geo-map{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.geo-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.geo-preview{overflow-x:auto;max-height:420px;overflow-y:auto;border:0.5px solid var(--border);border-radius:var(--rl)}
+.geo-preview table{width:100%;border-collapse:collapse;font-size:11px}
+.geo-preview th{background:var(--blue);color:#fff;padding:7px 9px;white-space:nowrap;position:sticky;top:0}
+.geo-preview td{padding:6px 9px;border-bottom:0.5px solid var(--border);vertical-align:middle}
+.geo-preview tr:nth-child(even) td{background:var(--gray2)}
+.dot-ok{color:var(--green3);font-size:16px;line-height:1}
+.dot-miss{color:var(--red2);font-size:16px;line-height:1}
 </style>
 </head>
 <body>
 
 <div class="topbar">
-  <h1>Match REFES — vinculador de padrones</h1>
-  <div class="sub">Cruza cualquier padrón contra REFES por scoring múltiple · Flask + Python backend</div>
+  <h1>Match REFES / Georef INDEC</h1>
+  <div class="sub">Vinculador de padrones · Normalización de domicilios vía API Georef · Flask + Python backend</div>
 </div>
 
 <div class="body">
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('match',this)">Match REFES</button>
+  <button class="tab" onclick="switchTab('georef',this)">Georef INDEC</button>
+</div>
+
+<div id="tab-match" class="tab-content active">
 
 <div class="stepper">
   <div class="step active" id="st1"><div class="sn">1</div>Archivos</div>
@@ -390,6 +415,82 @@ tr:nth-child(even) td{background:var(--gray2)}
   </div>
 </div>
 </div>
+
+</div><!-- #tab-match -->
+
+<!-- ══ TAB GEOREF ══════════════════════════════════════════════════ -->
+<div id="tab-georef" class="tab-content">
+
+<div class="card">
+  <h2>Paso 1 — Subir archivo</h2>
+  <p style="font-size:12px;color:var(--text3);margin-bottom:14px">
+    Subí cualquier archivo (.xlsx, .xls, .csv). Después mapeás qué columna es cada campo de domicilio.
+    El módulo llama a la <strong>API Georef (datos.gob.ar)</strong> y agrega columnas con
+    provincia/departamento INDEC normalizado y lat/lon.
+  </p>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start">
+    <div>
+      <div class="zone" id="gzone" onclick="document.getElementById('ginput').click()">
+        <input type="file" id="ginput" accept=".xlsx,.xls,.csv">
+        <div class="zone-icon">📄</div>
+        <div style="font-size:13px;font-weight:500">Subir archivo</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">.xlsx .xls .csv</div>
+        <div class="zone-name hidden" id="gname"></div>
+      </div>
+    </div>
+    <div>
+      <div class="field">
+        <label>¿Cómo viene el domicilio?</label>
+        <select id="g-addr" onchange="buildGeoMap()">
+          <option value="combined">Un solo campo (calle + número juntos)</option>
+          <option value="split">Dos campos separados (calle / número)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Workers paralelos</label>
+        <select id="g-workers">
+          <option value="3">3 (estable)</option>
+          <option value="5" selected>5 (recomendado)</option>
+          <option value="8">8 (rápido)</option>
+        </select>
+        <div class="hint">Más workers = más rápido pero más carga en la API.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card hidden" id="g-map-card">
+  <h2>Paso 2 — Mapear columnas</h2>
+  <p style="font-size:12px;color:var(--text3);margin-bottom:14px">
+    Elegí qué columna del archivo corresponde a cada campo. Todos son opcionales, pero conviene
+    mapear al menos <strong>provincia</strong> y <strong>domicilio</strong> para que Georef pueda
+    geocodificar bien.
+  </p>
+  <div class="geo-map" id="g-fields"></div>
+  <div class="acts" style="margin-top:14px">
+    <button class="btn bp" id="g-run-btn" onclick="runGeo()">Enriquecer con Georef →</button>
+    <span id="g-run-msg" style="font-size:12px;color:var(--text3)"></span>
+  </div>
+</div>
+
+<div class="card hidden" id="g-prog-card">
+  <h2>Procesando…</h2>
+  <div class="pbar"><div class="pfill" id="g-pf" style="width:0%"></div></div>
+  <div style="font-size:12px;color:var(--text3);margin-top:6px" id="g-prog-txt">Iniciando…</div>
+</div>
+
+<div id="g-results" class="hidden">
+  <div class="geo-metrics" id="g-met"></div>
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h2 style="margin:0">Preview (primeras 50 filas)</h2>
+      <button class="btn bg" id="g-dl-btn" onclick="geoDownload()">Descargar Excel completo</button>
+    </div>
+    <div class="geo-preview" id="g-preview"></div>
+  </div>
+</div>
+
+</div><!-- #tab-georef -->
 
 </div>
 
@@ -826,6 +927,178 @@ function renderT(resetPage){
     <span>Pág. ${ST.page+1} de ${tp}</span>
     <button class="btn bs" style="padding:4px 10px;font-size:12px" onclick="ST.page=Math.min(${tp-1},ST.page+1);renderT()" ${ST.page>=tp-1?'disabled':''}>Siguiente →</button>`;
 }
+
+// ── Tab switching ───────────────────────────────────────────────────
+function switchTab(name, btn){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+}
+
+// ── Georef state ────────────────────────────────────────────────────
+const GS = {
+  fileId: null,
+  cols:   [],
+  jobId:  null,
+  pollTimer: null,
+  results: [],
+};
+
+// Campos mapeables
+const GEO_FIELDS = [
+  {k:'provincia',    l:'Provincia',                    hint:'Nombre de provincia',        always:true},
+  {k:'departamento', l:'Departamento / Partido',        hint:'Nombre de departamento'},
+  {k:'localidad',    l:'Localidad',                     hint:'Ayuda al geocodificador'},
+  {k:'domicilio',    l:'Domicilio (calle + número)',    hint:'Campo unificado',  combined:true},
+  {k:'calle',        l:'Calle',                         hint:'Solo calle',       split:true},
+  {k:'numero',       l:'Número',                        hint:'Solo número',      split:true},
+];
+
+const GEO_GUESSES = {
+  provincia:    ['Provincia','provincia','provincia_nombre','PROVINCIA'],
+  departamento: ['Partido/ Departamento','departamento','Partido','partido','departamento_nombre'],
+  localidad:    ['Localidad','localidad','localidad_nombre','LOCALIDAD'],
+  domicilio:    ['domicilio','Calle','calle','DOMICILIO','Domicilio'],
+  calle:        ['Calle','calle','CALLE'],
+  numero:       ['Nro','numero','nro','NUMERO','NRO'],
+};
+
+// Setup drop zone
+(function(){
+  const inp  = document.getElementById('ginput');
+  const zone = document.getElementById('gzone');
+  inp.addEventListener('change', async e => {
+    const f = e.target.files[0];
+    if(!f) return;
+    const fd = new FormData();
+    fd.append('file', f);
+    fd.append('role', 'georef');
+    const res = await fetch('/api/upload',{method:'POST',body:fd}).then(r=>r.json());
+    if(res.error){ alert(res.error); return; }
+    GS.fileId = res.file_id;
+    GS.cols   = res.columns;
+    zone.classList.add('ok');
+    const n = document.getElementById('gname');
+    n.textContent = `✓ ${res.filename} — ${res.rows.toLocaleString()} filas`;
+    n.classList.remove('hidden');
+    document.getElementById('g-map-card').classList.remove('hidden');
+    buildGeoMap();
+  });
+  zone.addEventListener('dragover', e=>{e.preventDefault();zone.classList.add('drag')});
+  zone.addEventListener('dragleave', ()=>zone.classList.remove('drag'));
+  zone.addEventListener('drop', e=>{
+    e.preventDefault(); zone.classList.remove('drag');
+    const dt=new DataTransfer(); dt.items.add(e.dataTransfer.files[0]);
+    inp.files=dt.files; inp.dispatchEvent(new Event('change'));
+  });
+})();
+
+function buildGeoMap(){
+  if(!GS.cols.length) return;
+  const addrType = document.getElementById('g-addr').value;
+  const el = document.getElementById('g-fields');
+  el.innerHTML = '';
+  GEO_FIELDS.forEach(f => {
+    if(f.combined && addrType !== 'combined') return;
+    if(f.split    && addrType !== 'split')    return;
+    const d = document.createElement('div');
+    d.className = 'field';
+    d.innerHTML = `
+      <label>${f.l}</label>
+      <select id="gm-${f.k}">
+        <option value="">— no disponible —</option>
+        ${GS.cols.map(c=>`<option value="${c}">${c}</option>`).join('')}
+      </select>
+      ${f.hint ? `<div class="hint">${f.hint}</div>` : ''}`;
+    el.appendChild(d);
+    const sel = d.querySelector('select');
+    for(const g of (GEO_GUESSES[f.k] || [])){
+      const found = GS.cols.find(c => c.toLowerCase() === g.toLowerCase());
+      if(found){ sel.value = found; break; }
+    }
+  });
+}
+
+document.getElementById('g-addr').addEventListener('change', buildGeoMap);
+
+async function runGeo(){
+  const addrType = document.getElementById('g-addr').value;
+  const col_map  = {};
+  GEO_FIELDS.forEach(f => {
+    const el = document.getElementById('gm-'+f.k);
+    if(el) col_map[f.k] = el.value || null;
+  });
+
+  const hasDom = addrType === 'combined' ? col_map.domicilio : col_map.calle;
+  const hasProv = col_map.provincia;
+  if(!hasDom && !hasProv){
+    document.getElementById('g-run-msg').textContent = 'Mapeá al menos provincia o domicilio.';
+    return;
+  }
+  document.getElementById('g-run-msg').textContent = '';
+
+  document.getElementById('g-map-card').classList.add('hidden');
+  document.getElementById('g-prog-card').classList.remove('hidden');
+  document.getElementById('g-results').classList.add('hidden');
+  document.getElementById('g-pf').style.width = '2%';
+  document.getElementById('g-prog-txt').textContent = 'Iniciando…';
+
+  const body = {
+    file_id:     GS.fileId,
+    col_map,
+    addr_type:   addrType,
+    max_workers: parseInt(document.getElementById('g-workers').value),
+  };
+
+  const res = await fetch('/geo/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(r=>r.json());
+  if(res.error){ alert(res.error); return; }
+  GS.jobId = res.job_id;
+
+  // Polling
+  if(GS.pollTimer) clearInterval(GS.pollTimer);
+  GS.pollTimer = setInterval(pollGeoStatus, 1200);
+}
+
+async function pollGeoStatus(){
+  const res = await fetch(`/geo/status/${GS.jobId}`).then(r=>r.json());
+  if(res.error){ clearInterval(GS.pollTimer); return; }
+
+  const pct = res.total > 0 ? Math.round(res.processed / res.total * 100) : 0;
+  document.getElementById('g-pf').style.width = pct + '%';
+  document.getElementById('g-prog-txt').textContent =
+    `${res.processed.toLocaleString()} / ${res.total.toLocaleString()} filas procesadas…`;
+
+  if(res.status === 'done'){
+    clearInterval(GS.pollTimer);
+    document.getElementById('g-prog-card').classList.add('hidden');
+    showGeoResults(res);
+  } else if(res.status === 'error'){
+    clearInterval(GS.pollTimer);
+    document.getElementById('g-prog-txt').textContent = 'Error: ' + res.error_msg;
+  }
+}
+
+function showGeoResults(job){
+  document.getElementById('g-met').innerHTML = `
+    <div class="metric"><div class="val">${job.total.toLocaleString()}</div><div class="lbl">Total filas</div></div>
+    <div class="metric mgood"><div class="val">${(job.con_punto||0).toLocaleString()}</div><div class="lbl">Con lat/lon</div></div>
+    <div class="metric mneu"><div class="val">${(job.total - (job.con_punto||0) - (job.errores||0)).toLocaleString()}</div><div class="lbl">Sin match</div></div>
+    <div class="metric mbad"><div class="val">${(job.errores||0).toLocaleString()}</div><div class="lbl">Con error</div></div>
+  `;
+  document.getElementById('g-results').classList.remove('hidden');
+  // Preview: fetch the xlsx is not straightforward, so we already have it server-side.
+  // Show a placeholder — the full data is in the Excel.
+  document.getElementById('g-preview').innerHTML =
+    `<div style="padding:24px;text-align:center;color:var(--text3);font-size:13px">
+      El archivo completo está listo para descargar. El preview completo se ve en el Excel.
+    </div>`;
+}
+
+function geoDownload(){
+  if(GS.jobId) window.location = `/geo/download/${GS.jobId}`;
+}
+
 </script>
 </body>
 </html>
