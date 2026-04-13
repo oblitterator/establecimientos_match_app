@@ -289,6 +289,7 @@ def normalizar_departamento(dept_raw: Optional[str],
     if id_provincia_indec:
         params["provincia"] = id_provincia_indec
 
+    out = None
     try:
         data = _api_get("departamentos", params)
         res  = data.get("departamentos", [])
@@ -298,12 +299,34 @@ def normalizar_departamento(dept_raw: Optional[str],
                 "id_departamento_indec":    str(res[0]["id"]),
                 "departamento_error":       None,
             }
-        else:
-            out = {"departamento_normalizado": None, "id_departamento_indec": None,
-                   "departamento_error": "sin match en API"}
     except Exception as e:
         out = {"departamento_normalizado": None, "id_departamento_indec": None,
                "departamento_error": f"{type(e).__name__}: {e}"}
+
+    # Fallback: buscar como localidad y tomar el departamento al que pertenece.
+    # Resuelve casos como "San Miguel de Tucumán" → departamento "Capital",
+    # o cualquier dataset que cargue el nombre de la ciudad en lugar del dpto INDEC.
+    if out is None or not out.get("id_departamento_indec"):
+        try:
+            loc_params = {"nombre": d, "max": 1}
+            if id_provincia_indec:
+                loc_params["provincia"] = id_provincia_indec
+            data2 = _api_get("localidades", loc_params)
+            locs  = data2.get("localidades", [])
+            if locs:
+                dept_info = locs[0].get("departamento") or {}
+                if dept_info.get("id"):
+                    out = {
+                        "departamento_normalizado": _limpiar_texto(dept_info.get("nombre", "")),
+                        "id_departamento_indec":    str(dept_info["id"]),
+                        "departamento_error":       None,
+                    }
+        except Exception:
+            pass  # si el fallback falla, queda el resultado del intento anterior
+
+    if out is None:
+        out = {"departamento_normalizado": None, "id_departamento_indec": None,
+               "departamento_error": "sin match en API"}
 
     with _cache_lock:
         _cache_dept[key] = out
@@ -347,14 +370,14 @@ def normalizar_direccion(domicilio:         Optional[str],
                 dept_info = r.get("departamento") or {}
                 prov_info = r.get("provincia") or {}
                 out = {
-                    "domicilio_normalizado":  r.get("nomenclatura") or r.get("nombre"),
-                    "latitud":                ubicacion.get("lat"),
-                    "longitud":               ubicacion.get("lon"),
-                    # estos pueden sobreescribir los de normalizar_provincia/depto
-                    # si la provincia/depto vino vacía pero la dirección la resolvió
-                    "_dir_id_provincia_indec":   _zfill(prov_info.get("id"), 2),
-                    "_dir_id_departamento_indec": str(dept_info.get("id") or ""),
-                    "domicilio_error":        None,
+                    "domicilio_normalizado":       r.get("nomenclatura") or r.get("nombre"),
+                    "latitud":                     ubicacion.get("lat"),
+                    "longitud":                    ubicacion.get("lon"),
+                    # internos: llenan prov/dept si los lookups directos fallaron
+                    "_dir_id_provincia_indec":     _zfill(prov_info.get("id"), 2),
+                    "_dir_id_departamento_indec":  str(dept_info.get("id") or ""),
+                    "_dir_departamento_normalizado": _limpiar_texto(dept_info.get("nombre") or ""),
+                    "domicilio_error":             None,
                 }
                 with _cache_lock:
                     _cache_dir[key] = out
@@ -394,7 +417,12 @@ def normalizar_fila(row:            Dict,
     if addr_type == "split":
         calle  = str(row.get(col_calle,  "") or "").strip() if col_calle  else ""
         numero = str(row.get(col_numero, "") or "").strip() if col_numero else ""
-        dom_raw = f"{calle} {numero}".strip()
+        # Evitar duplicar el número cuando ya viene al final del campo calle
+        # Ej: calle="Colon 59" + numero="59" → "Colon 59", no "Colon 59 59"
+        if numero and calle.rstrip().endswith(numero):
+            dom_raw = calle.strip()
+        else:
+            dom_raw = f"{calle} {numero}".strip()
     else:
         dom_raw = str(row.get(col_domicilio, "") or "").strip() if col_domicilio else ""
 
@@ -408,15 +436,19 @@ def normalizar_fila(row:            Dict,
     # 3. Dirección (localidad no es param de filtro válido en Georef /direcciones)
     dir_out  = normalizar_direccion(dom_raw, id_prov)
 
-    # Si la dirección resolvió prov/dept y los campos de arriba estaban vacíos, usarlos
+    # Si la dirección resolvió prov/dept y los lookups directos fallaron, usarlos
     if not prov_out.get("id_provincia_indec") and dir_out.get("_dir_id_provincia_indec"):
         prov_out["id_provincia_indec"] = dir_out["_dir_id_provincia_indec"]
     if not dept_out.get("id_departamento_indec") and dir_out.get("_dir_id_departamento_indec"):
         dept_out["id_departamento_indec"] = dir_out["_dir_id_departamento_indec"]
+        if not dept_out.get("departamento_normalizado") and dir_out.get("_dir_departamento_normalizado"):
+            dept_out["departamento_normalizado"] = dir_out["_dir_departamento_normalizado"]
+        dept_out["departamento_error"] = None  # si vino del dpto, no es error
 
     # Limpiar claves internas antes de devolver
     dir_out.pop("_dir_id_provincia_indec", None)
     dir_out.pop("_dir_id_departamento_indec", None)
+    dir_out.pop("_dir_departamento_normalizado", None)
 
     return {**prov_out, **dept_out, **dir_out}
 
