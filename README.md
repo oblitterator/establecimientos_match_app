@@ -2,18 +2,26 @@
 
 Aplicación web local con dos módulos independientes:
 
-1. **Match REFES** — cruza cualquier padrón de establecimientos contra el registro REFES usando scoring múltiple por campo.
+1. **Match REFES** — cruza cualquier padrón de establecimientos de salud contra REFES, el dato maestro nacional, usando scoring múltiple por campo.
 2. **Georef INDEC** — normaliza domicilios de cualquier archivo consultando la API oficial Georef del gobierno argentino, y agrega códigos INDEC de provincia/departamento más coordenadas geográficas.
 
 Backend en Python/Flask · Frontend HTML/JS vanilla · Sin dependencias de Node.
 
 ---
 
-## ¿Qué es REFES?
+## Objetivo
 
-REFES (Registro Federal de Establecimientos de Salud) es el padrón oficial del Ministerio de Salud de la Nación Argentina que lista todos los establecimientos sanitarios del país. Cada establecimiento tiene un identificador único REFES y está georreferenciado con códigos INDEC de provincia y departamento.
+En el sistema de salud argentino conviven múltiples actores que mantienen sus propios registros de establecimientos: obras sociales, prepagas, colegios profesionales, ministerios provinciales, financiadores y prestadores de distinta naturaleza. Cada uno carga los datos con criterios propios — nombres abreviados, domicilios sin normalizar, sin código de establecimiento oficial.
 
-El problema habitual es que otros organismos (obras sociales, colegios profesionales, ministerios provinciales) tienen sus propios padrones de establecimientos, con nombres y domicilios ingresados de forma libre y sin el ID REFES. Este módulo vincula esos padrones contra REFES para asignarle el ID correspondiente a cada establecimiento.
+REFES (Registro Federal de Establecimientos de Salud) es el dato maestro: el padrón oficial del Ministerio de Salud de la Nación que identifica de forma unívoca cada establecimiento sanitario del país con un ID propio y datos georreferenciados.
+
+El objetivo de esta herramienta es **vincular cualquiera de esos padrones sectoriales contra REFES** para determinar a qué establecimiento REFES corresponde cada registro, y así obtener el ID oficial. Ese ID permite después consolidar información de fuentes distintas sobre el mismo establecimiento.
+
+Ejemplos de padrones que se pueden cruzar:
+- Padrón de farmacias de un colegio farmacéutico provincial (ej. COFA)
+- Cartilla de prestadores de una obra social o prepaga
+- Registro de efectores de un ministerio provincial de salud
+- Cualquier otro listado de establecimientos con nombre, domicilio y/o CUIT
 
 ## ¿Qué son los códigos INDEC?
 
