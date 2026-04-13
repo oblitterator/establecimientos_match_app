@@ -6,7 +6,7 @@ Backend en Python/Flask · Frontend HTML/JS vanilla · Sin dependencias de Node.
 ## Estructura
 
 ```
-match_app/
+/
 ├── app.py              ← servidor Flask (toda la lógica de matching)
 ├── requirements.txt
 ├── static/
@@ -77,8 +77,14 @@ usa comparación de texto para provincia y departamento.
 - Provincia: código INDEC exacto si disponible, texto fuzzy si no
 - Departamento: ídem
 - Localidad: fuzzy token set ratio
-- Nombre establecimiento: fuzzy (sin prefijo FARMACIA/FARM)
-- Domicilio: fuzzy (sin prefijo AV/AVENIDA/CALLE)
+- Nombre establecimiento: fuzzy (sin prefijo FARMACIA/FARM; números romanos normalizados a arábigos)
+- Domicilio: fuzzy (sin prefijo AV/AVENIDA/CALLE; separadores espacio y punto)
+
+**Bonuses sobre el score final:**
+- +15 pts si coinciden los códigos INDEC de provincia y departamento exactos (`BONUS_GEO_EXACTA`)
+- +10 pts si el domicilio normalizado coincide exactamente (`BONUS_DOM_EXACTO`)
+
+El total se capa en 100.
 
 ## Campos esperados
 
