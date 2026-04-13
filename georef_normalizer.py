@@ -311,15 +311,14 @@ def normalizar_departamento(dept_raw: Optional[str],
 
 
 def normalizar_direccion(domicilio:         Optional[str],
-                          id_provincia_indec: Optional[str],
-                          localidad:          Optional[str] = None) -> Dict[str, Any]:
+                          id_provincia_indec: Optional[str]) -> Dict[str, Any]:
     empty = {"domicilio_normalizado": None, "latitud": None, "longitud": None,
              "domicilio_error": None}
     if _es_vacio(domicilio):
         return empty
 
     for variante in _variantes_domicilio(domicilio):
-        key = (variante, str(id_provincia_indec or ""), str(localidad or ""))
+        key = (variante, str(id_provincia_indec or ""))
         with _cache_lock:
             if key in _cache_dir:
                 cached = _cache_dir[key]
@@ -331,12 +330,13 @@ def normalizar_direccion(domicilio:         Optional[str],
         params: Dict[str, Any] = {
             "direccion": variante,
             "max":       1,
-            "campos":    "id,nombre,ubicacion,departamento,provincia,nomenclatura",
+            # Sin 'campos': el response por defecto incluye ubicacion, departamento,
+            # provincia, nomenclatura con la estructura correcta (dot-notation fields).
+            # Pasarlo manualmente causaba 400 porque la API espera "ubicacion.lat"
+            # no "ubicacion" — más simple usar el default.
         }
         if id_provincia_indec:
             params["provincia"] = id_provincia_indec
-        if not _es_vacio(localidad):
-            params["localidad_censal"] = _limpiar_texto(localidad)
 
         try:
             data = _api_get("direcciones", params)
@@ -405,8 +405,8 @@ def normalizar_fila(row:            Dict,
     # 2. Departamento
     dept_out = normalizar_departamento(dept_raw, id_prov)
 
-    # 3. Dirección
-    dir_out  = normalizar_direccion(dom_raw, id_prov, localidad_raw)
+    # 3. Dirección (localidad no es param de filtro válido en Georef /direcciones)
+    dir_out  = normalizar_direccion(dom_raw, id_prov)
 
     # Si la dirección resolvió prov/dept y los campos de arriba estaban vacíos, usarlos
     if not prov_out.get("id_provincia_indec") and dir_out.get("_dir_id_provincia_indec"):
