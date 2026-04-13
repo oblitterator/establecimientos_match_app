@@ -103,6 +103,12 @@ tr:nth-child(even) td{background:var(--gray2)}
 .filters input{width:180px}
 
 .warn-box{padding:10px 14px;background:#FEF9C3;border-radius:var(--r);font-size:12px;color:#854D0E;margin-top:12px}
+
+.col-picker{position:relative;display:inline-block}
+.col-panel{display:none;position:absolute;right:0;top:calc(100% + 4px);background:var(--white);border:0.5px solid var(--border);border-radius:var(--r);padding:10px 14px;z-index:200;min-width:190px;box-shadow:0 4px 12px rgba(0,0,0,.12);column-count:2;column-gap:8px}
+.col-panel.open{display:block}
+.col-panel label{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:400;padding:3px 0;cursor:pointer;break-inside:avoid;white-space:nowrap}
+.col-panel input[type=checkbox]{width:auto;cursor:pointer}
 </style>
 </head>
 <body>
@@ -142,6 +148,13 @@ tr:nth-child(even) td{background:var(--gray2)}
         <option value="split">Dos campos separados (calle / número)</option>
       </select>
     </div>
+    <div class="field" style="margin-top:8px">
+      <label>¿Incluye coordenadas geográficas (latitud / longitud)?</label>
+      <select id="r-coords">
+        <option value="no">No incluye coordenadas</option>
+        <option value="yes">Sí incluye latitud y longitud</option>
+      </select>
+    </div>
   </div>
   <div class="card">
     <h2>Archivo externo <span class="badge br">fundamental</span></h2>
@@ -159,6 +172,13 @@ tr:nth-child(even) td{background:var(--gray2)}
         <option value="">— seleccionar —</option>
         <option value="combined">Un solo campo (calle + número juntos)</option>
         <option value="split">Dos campos separados (calle / número)</option>
+      </select>
+    </div>
+    <div class="field" style="margin-top:8px">
+      <label>¿Incluye coordenadas geográficas (latitud / longitud)?</label>
+      <select id="e-coords">
+        <option value="no">No incluye coordenadas</option>
+        <option value="yes">Sí incluye latitud y longitud</option>
       </select>
     </div>
   </div>
@@ -180,6 +200,7 @@ tr:nth-child(even) td{background:var(--gray2)}
         <tr><td>Domicilio / Calle</td><td><span class="badge bo">opcional</span></td></tr>
         <tr><td>Número (si separado)</td><td><span class="badge bo">opcional</span></td></tr>
         <tr><td>CUIT</td><td><span class="badge bo">opcional</span></td></tr>
+        <tr><td>Latitud / Longitud</td><td><span class="badge bo">opcional</span></td></tr>
       </table>
     </div>
     <div>
@@ -195,6 +216,7 @@ tr:nth-child(even) td{background:var(--gray2)}
         <tr><td>Domicilio / Calle</td><td><span class="badge bo">opcional</span></td></tr>
         <tr><td>Número (si separado)</td><td><span class="badge bo">opcional</span></td></tr>
         <tr><td>CUIT</td><td><span class="badge bo">opcional</span></td></tr>
+        <tr><td>Latitud / Longitud</td><td><span class="badge bo">opcional</span></td></tr>
       </table>
     </div>
   </div>
@@ -240,10 +262,18 @@ tr:nth-child(even) td{background:var(--gray2)}
         <span>30</span><span id="twv" style="font-weight:500;color:var(--amber3)">50</span><span>70</span>
       </div>
     </div>
+    <div class="field">
+      <label>Score mínimo para asignar (por debajo → sin match)</label>
+      <input type="range" id="tm" min="10" max="60" step="5" value="30" oninput="updLeg()">
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3);margin-top:2px">
+        <span>10</span><span id="tmv" style="font-weight:500;color:var(--red)">30</span><span>60</span>
+      </div>
+    </div>
     <div style="margin-top:10px;font-size:12px;display:flex;flex-direction:column;gap:5px">
       <div><span class="cg">Match bueno</span> score ≥ <span id="lg">70</span></div>
       <div><span class="cw">Revisar</span> score entre <span id="lw">50</span> y <span id="lg2">69</span></div>
-      <div><span class="cb">Dudoso</span> score &lt; <span id="lw2">50</span></div>
+      <div><span class="cb">Dudoso</span> score entre <span id="lm">30</span> y <span id="lw2">49</span></div>
+      <div><span class="cn">Sin match</span> score &lt; <span id="lm2">30</span> (o sin candidato)</div>
     </div>
   </div>
   <div class="card">
@@ -258,7 +288,7 @@ tr:nth-child(even) td{background:var(--gray2)}
     </div>
     <div class="field">
       <label>Prefijos a eliminar del nombre</label>
-      <input type="text" id="np" value="FARMACIA,FARM">
+      <input type="text" id="np" value="FARMACIA,FCIA,FARM">
       <div class="hint">Lista separada por comas. Se eliminan del inicio del nombre antes de comparar.</div>
     </div>
     <div class="field">
@@ -315,24 +345,43 @@ tr:nth-child(even) td{background:var(--gray2)}
   <div class="card">
     <h2>Detalle</h2>
     <div class="filters">
-      <select id="fc" onchange="renderT()">
+      <select id="fc" onchange="renderT(true)">
         <option value="">Todas las categorías</option>
         <option value="MATCH_BUENO">Match bueno</option>
         <option value="MATCH_REVISAR">Revisar</option>
         <option value="MATCH_DUDOSO">Dudoso</option>
         <option value="SIN_MATCH">Sin match</option>
       </select>
-      <select id="fp" onchange="renderT()"><option value="">Todas las provincias</option></select>
-      <input type="text" id="ft" placeholder="Buscar nombre…" oninput="renderT()" style="width:180px">
+      <select id="fp" onchange="renderT(true)"><option value="">Todas las provincias</option></select>
+      <input type="text" id="ft" placeholder="Buscar nombre…" oninput="renderT(true)" style="width:180px">
+      <div class="col-picker">
+        <button class="btn bs" style="padding:5px 10px;font-size:12px" onclick="toggleColPanel(event)">Columnas ▾</button>
+        <div class="col-panel" id="colPanel"></div>
+      </div>
       <span id="fc2" style="font-size:12px;color:var(--text3);align-self:center"></span>
     </div>
     <div class="tw">
       <table>
         <thead><tr>
-          <th>ID externo</th><th>Nombre externo</th><th>Provincia</th>
-          <th>ID REFES</th><th>Nombre REFES</th>
-          <th>S.Prov</th><th>S.Dept</th><th>S.Loc</th><th>S.Nom</th><th>S.Dom</th>
-          <th>Score</th><th>Camino</th><th>Categoría</th>
+          <th class="tc0">ID externo</th>
+          <th class="tc1">Nombre externo</th>
+          <th class="tc2">Provincia</th>
+          <th class="tc3">Departamento</th>
+          <th class="tc4">Localidad</th>
+          <th class="tc5">Domicilio ext.</th>
+          <th class="tc6">N° ext.</th>
+          <th class="tc7">ID REFES</th>
+          <th class="tc8">Nombre REFES</th>
+          <th class="tc9">Dom. REFES</th>
+          <th class="tc10">S.Prov</th>
+          <th class="tc11">S.Dept</th>
+          <th class="tc12">S.Loc</th>
+          <th class="tc13">S.Nom</th>
+          <th class="tc14">S.Dom</th>
+          <th class="tc15">Score</th>
+          <th class="tc16">Camino</th>
+          <th class="tc17">Categoría</th>
+          <th class="tc18">Anomalía</th>
         </tr></thead>
         <tbody id="rtb"></tbody>
       </table>
@@ -350,8 +399,64 @@ const ST = {
   cols:{refes:[],ext:[]},
   results:[], filtered:[], page:0, ps:50,
   outId:null, chart:null,
-  W:{PROV:20,DEPT:30,LOC:15,NOM:20,DOM:15},
+  W:{PROV:15,DEPT:20,LOC:10,NOM:30,DOM:25},
 };
+
+// ── Selector de columnas ────────────────────────────────────────────
+const TCOLS = [
+  {id:'tc0',  label:'ID externo',      def:true},
+  {id:'tc1',  label:'Nombre externo',  def:true},
+  {id:'tc2',  label:'Provincia',       def:true},
+  {id:'tc3',  label:'Departamento',    def:false},
+  {id:'tc4',  label:'Localidad',       def:false},
+  {id:'tc5',  label:'Domicilio ext.',  def:false},
+  {id:'tc6',  label:'N° ext.',         def:false},
+  {id:'tc7',  label:'ID REFES',        def:true},
+  {id:'tc8',  label:'Nombre REFES',    def:true},
+  {id:'tc9',  label:'Dom. REFES',      def:false},
+  {id:'tc10', label:'S.Prov',          def:false},
+  {id:'tc11', label:'S.Dept',          def:false},
+  {id:'tc12', label:'S.Loc',           def:false},
+  {id:'tc13', label:'S.Nom',           def:false},
+  {id:'tc14', label:'S.Dom',           def:false},
+  {id:'tc15', label:'Score total',     def:true},
+  {id:'tc16', label:'Camino',          def:false},
+  {id:'tc17', label:'Categoría',       def:true},
+  {id:'tc18', label:'Anomalía',        def:true},
+];
+const colVisible = {};
+TCOLS.forEach(c => colVisible[c.id] = c.def);
+
+function buildColPanel(){
+  const panel = document.getElementById('colPanel');
+  panel.innerHTML = TCOLS.map(c=>`
+    <label>
+      <input type="checkbox" ${colVisible[c.id]?'checked':''} onchange="toggleCol('${c.id}',this.checked)">
+      ${c.label}
+    </label>`).join('');
+}
+
+function toggleColPanel(e){
+  e.stopPropagation();
+  document.getElementById('colPanel').classList.toggle('open');
+}
+
+function toggleCol(id, visible){
+  colVisible[id] = visible;
+  applyColVisibility();
+}
+
+function applyColVisibility(){
+  TCOLS.forEach(c => {
+    const disp = colVisible[c.id] ? '' : 'none';
+    document.querySelectorAll('.'+c.id).forEach(el => el.style.display = disp);
+  });
+}
+
+document.addEventListener('click', ()=>{
+  const p = document.getElementById('colPanel');
+  if(p) p.classList.remove('open');
+});
 
 // ── Upload ─────────────────────────────────────────────────────────
 async function uploadFile(file, role){
@@ -421,6 +526,8 @@ const RF=[
   {k:'name',  l:'Nombre establecimiento',    req:false},
   {k:'addr',  l:'Domicilio / Calle',          req:false},
   {k:'num',   l:'Número',                    req:false,split:true},
+  {k:'lat',   l:'Latitud',                   req:false,latlon:true},
+  {k:'lon',   l:'Longitud',                  req:false,latlon:true},
 ];
 const EF=[
   {k:'id',    l:'ID propio',                 req:true},
@@ -433,6 +540,8 @@ const EF=[
   {k:'name',  l:'Nombre establecimiento',    req:false},
   {k:'addr',  l:'Domicilio / Calle',          req:false},
   {k:'num',   l:'Número',                    req:false,split:true},
+  {k:'lat',   l:'Latitud',                   req:false,latlon:true},
+  {k:'lon',   l:'Longitud',                  req:false,latlon:true},
 ];
 const GUESSES={
   id:['establecimiento_id','id','Idcofa','ID'],
@@ -445,13 +554,16 @@ const GUESSES={
   name:['establecimiento_nombre','Nombre','nombre'],
   addr:['domicilio','Calle','calle'],
   num:['Nro','numero','nro','num'],
+  lat:['lat','latitud','latitude','LAT','Latitud'],
+  lon:['lon','long','longitud','longitude','LON','Longitud'],
 };
 
-function buildMap(fields, cols, addrType, containerId){
+function buildMap(fields, cols, addrType, hasCoords, containerId){
   const el=document.getElementById(containerId);
   el.innerHTML='';
   fields.forEach(f=>{
     if(f.split && addrType!=='split') return;
+    if(f.latlon && !hasCoords) return;
     const d=document.createElement('div');
     d.className='field';
     d.innerHTML=`<label>${f.l} <span class="badge ${f.req?'br':'bo'}">${f.req?'fundamental':'opcional'}</span></label>
@@ -471,8 +583,10 @@ function buildMap(fields, cols, addrType, containerId){
 function go2(){
   const ra=document.getElementById('r-addr').value;
   const ea=document.getElementById('e-addr').value;
-  buildMap(RF, ST.cols.refes, ra, 'fr');
-  buildMap(EF, ST.cols.ext,   ea, 'fe');
+  const rc=document.getElementById('r-coords').value==='yes';
+  const ec=document.getElementById('e-coords').value==='yes';
+  buildMap(RF, ST.cols.refes, ra, rc, 'fr');
+  buildMap(EF, ST.cols.ext,   ea, ec, 'fe');
   setStep(2);
 }
 
@@ -532,12 +646,16 @@ function updWTot(){
 function updLeg(){
   const g=document.getElementById('tg').value;
   const w=document.getElementById('tw').value;
+  const m=document.getElementById('tm').value;
   document.getElementById('tgv').textContent=g;
   document.getElementById('twv').textContent=w;
+  document.getElementById('tmv').textContent=m;
   document.getElementById('lg').textContent=g;
   document.getElementById('lg2').textContent=g-1;
   document.getElementById('lw').textContent=w;
   document.getElementById('lw2').textContent=w;
+  document.getElementById('lm').textContent=m;
+  document.getElementById('lm2').textContent=m;
 }
 
 // ── Run ────────────────────────────────────────────────────────────
@@ -565,6 +683,7 @@ async function runMatch(){
     weights:          ST.W,
     thr_good:         parseInt(document.getElementById('tg').value),
     thr_warn:         parseInt(document.getElementById('tw').value),
+    thr_min:          parseInt(document.getElementById('tm').value),
     use_cuit:         document.getElementById('uc').value==='yes',
     name_prefixes:    document.getElementById('np').value.split(',').map(s=>s.trim()).filter(Boolean),
     addr_prefixes:    document.getElementById('ap').value.split(',').map(s=>s.trim()).filter(Boolean),
@@ -650,10 +769,12 @@ function buildDash(data){
   });
 
   ST.filtered=ST.results; ST.page=0;
+  buildColPanel();
   renderT();
 }
 
-function renderT(){
+function renderT(resetPage){
+  if(resetPage) ST.page=0;
   const cat=document.getElementById('fc').value;
   const prov=document.getElementById('fp').value;
   const txt=document.getElementById('ft').value.toLowerCase();
@@ -674,28 +795,36 @@ function renderT(){
       r.categoria==='MATCH_REVISAR'?'<span class="cw">Revisar</span>':
       r.categoria==='MATCH_DUDOSO'?'<span class="cb">Dudoso</span>':'<span class="cn">Sin match</span>';
     return `<tr>
-      <td style="font-family:monospace;font-size:11px">${r.ext_id||''}</td>
-      <td>${r.ext_nombre||''}</td><td style="font-size:11px">${r.ext_provincia||''}</td>
-      <td style="font-family:monospace;font-size:11px">${r.refes_id||'—'}</td>
-      <td>${r.refes_nombre||'—'}</td>
-      <td style="text-align:center">${r.score_provincia??'—'}</td>
-      <td style="text-align:center">${r.score_departamento??'—'}</td>
-      <td style="text-align:center">${r.score_localidad??'—'}</td>
-      <td style="text-align:center">${r.score_nombre??'—'}</td>
-      <td style="text-align:center">${r.score_domicilio??'—'}</td>
-      <td><div class="sbw">
+      <td class="tc0" style="font-family:monospace;font-size:11px">${r.ext_id||''}</td>
+      <td class="tc1">${r.ext_nombre||''}</td>
+      <td class="tc2" style="font-size:11px">${r.ext_provincia||''}</td>
+      <td class="tc3" style="font-size:11px">${r.ext_departamento||''}</td>
+      <td class="tc4" style="font-size:11px">${r.ext_localidad||''}</td>
+      <td class="tc5" style="font-size:11px">${r.ext_domicilio||''}</td>
+      <td class="tc6" style="font-size:11px;text-align:center">${r.ext_numero??''}</td>
+      <td class="tc7" style="font-family:monospace;font-size:11px">${r.refes_id||'—'}</td>
+      <td class="tc8">${r.refes_nombre||'—'}</td>
+      <td class="tc9" style="font-size:11px">${r.refes_domicilio||''}</td>
+      <td class="tc10" style="text-align:center">${r.score_provincia??'—'}</td>
+      <td class="tc11" style="text-align:center">${r.score_departamento??'—'}</td>
+      <td class="tc12" style="text-align:center">${r.score_localidad??'—'}</td>
+      <td class="tc13" style="text-align:center">${r.score_nombre??'—'}</td>
+      <td class="tc14" style="text-align:center">${r.score_domicilio??'—'}</td>
+      <td class="tc15"><div class="sbw">
         <div class="sbm" style="width:${sc??0}px;max-width:55px;background:${bC}"></div>
         <span style="color:${scC};font-weight:500">${sc??'—'}</span>
       </div></td>
-      <td style="text-align:center;font-size:11px">${r.camino}</td>
-      <td>${badge}</td>
+      <td class="tc16" style="text-align:center;font-size:11px">${r.camino||''}</td>
+      <td class="tc17">${badge}</td>
+      <td class="tc18" style="font-size:11px${r.anomalia?';background:#FFF9C4;color:#7A5800':''}">${r.anomalia||''}</td>
     </tr>`;
   }).join('');
-  const tp=Math.ceil(ST.filtered.length/ST.ps);
+  applyColVisibility();
+  const tp=Math.ceil(ST.filtered.length/ST.ps)||1;
   document.getElementById('pag').innerHTML=
     `<button class="btn bs" style="padding:4px 10px;font-size:12px" onclick="ST.page=Math.max(0,ST.page-1);renderT()" ${ST.page===0?'disabled':''}>← Anterior</button>
-    <span>Pág. ${ST.page+1} de ${Math.max(1,tp)}</span>
-    <button class="btn bs" style="padding:4px 10px;font-size:12px" onclick="ST.page=Math.min(tp-1,ST.page+1);renderT()" ${ST.page>=tp-1?'disabled':''}>Siguiente →</button>`;
+    <span>Pág. ${ST.page+1} de ${tp}</span>
+    <button class="btn bs" style="padding:4px 10px;font-size:12px" onclick="ST.page=Math.min(${tp-1},ST.page+1);renderT()" ${ST.page>=tp-1?'disabled':''}>Siguiente →</button>`;
 }
 </script>
 </body>
