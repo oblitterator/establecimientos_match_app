@@ -35,8 +35,26 @@ TIMEOUT  = 25
 MAX_RETRIES  = 4
 BACKOFF_BASE = 2.0
 
-GEOREF_API_KEY    = os.getenv("GEOREF_API_KEY",    "UTiFpVpdbzQTozOJmigfhvSvySOWhiXZ")
-GEOREF_API_SECRET = os.getenv("GEOREF_API_SECRET", "SsfYSGLWeGcd2asYhRIpQfFDk5U1ExFZ")
+
+def _load_dotenv() -> None:
+    """Carga KEY=VALOR desde .env (junto a este archivo) sin pisar variables ya definidas."""
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if not os.path.exists(env_path):
+        return
+    with open(env_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, val = line.split("=", 1)
+            os.environ.setdefault(key.strip(), val.strip().strip('"').strip("'"))
+
+
+_load_dotenv()
+
+# Credenciales: definir en .env (ver .env.example) o como variables de entorno
+GEOREF_API_KEY    = os.getenv("GEOREF_API_KEY", "")
+GEOREF_API_SECRET = os.getenv("GEOREF_API_SECRET", "")
 
 # ─────────────────────────────────────────────────────────────────────
 # ALIASES DE PROVINCIAS

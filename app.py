@@ -3,20 +3,66 @@ match_app — backend Flask para el vinculador REFES
 Correr con: python app.py
 Requiere: flask pandas openpyxl
 """
-import subprocess, sys
+import os, subprocess, sys, tempfile
+from pathlib import Path
+
+
+BASE_DIR = Path(__file__).resolve().parent
+
+
+def _prepare_pip_environment() -> None:
+    # Evita usar %TEMP% de C: cuando esta sin espacio.
+    tmp_dir = BASE_DIR / '.tmp'
+    cache_dir = BASE_DIR / '.pip-cache'
+    tmp_dir.mkdir(exist_ok=True)
+    cache_dir.mkdir(exist_ok=True)
+    os.environ['TMP'] = str(tmp_dir)
+    os.environ['TEMP'] = str(tmp_dir)
+    os.environ['PIP_CACHE_DIR'] = str(cache_dir)
+    os.environ['PIP_NO_CACHE_DIR'] = '1'
+    tempfile.tempdir = str(tmp_dir)
+
+
+_prepare_pip_environment()
+
+
+def _pip_available() -> bool:
+    return subprocess.call(
+        [sys.executable, '-m', 'pip', '--version'],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    ) == 0
+
+
+def _bootstrap_pip() -> bool:
+    if _pip_available():
+        return True
+    print('pip no esta disponible en este entorno. Intentando repararlo...')
+    if subprocess.call([sys.executable, '-m', 'ensurepip', '--upgrade']) != 0:
+        return False
+    subprocess.call([
+        sys.executable, '-m', 'pip', 'install', '--upgrade', 'pip', '--quiet', '--no-cache-dir'
+    ])
+    return _pip_available()
 
 def _ensure(*pkgs):
     for pkg in pkgs:
         try:
             __import__(pkg.split('[')[0].replace('-', '_'))
         except ImportError:
+            if not _bootstrap_pip():
+                raise RuntimeError(
+                    'No se pudo inicializar pip en este entorno. '
+                    'Ejecuta setup_venv.ps1 para recrear dependencias.'
+                )
             print(f'Instalando {pkg}...')
-            subprocess.check_call([sys.executable, '-m', 'pip', 'install', pkg, '--quiet'])
+            subprocess.check_call([
+                sys.executable, '-m', 'pip', 'install', pkg, '--quiet', '--no-cache-dir'
+            ])
 
 _ensure('flask', 'pandas', 'openpyxl', 'requests')
 
-import os, re, uuid, unicodedata, threading
-from pathlib import Path
+import re, uuid, unicodedata, threading
 import pandas as pd
 from flask import Flask, request, jsonify, send_file, send_from_directory
 
@@ -852,5 +898,16 @@ def _save_xlsx(results: list, path: Path):
 
 
 if __name__ == '__main__':
-    print('Iniciando servidor en http://localhost:5001')
-    app.run(debug=True, port=5001)
+    import socket, webbrowser
+    url = 'http://localhost:5001'
+    # En Windows varios procesos pueden escuchar el mismo puerto y el navegador
+    # termina hablando con una instancia vieja colgada: abortar si ya hay una.
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.settimeout(1)
+        if s.connect_ex(('127.0.0.1', 5001)) == 0:
+            print('El puerto 5001 ya esta en uso: hay otra instancia de la app abierta.')
+            print('Cerra esa ventana (o el proceso python.exe) y volve a lanzar.')
+            sys.exit(1)
+    print(f'Iniciando servidor en {url}')
+    threading.Timer(1.5, lambda: webbrowser.open(url)).start()
+    app.run(debug=False, port=5001)
